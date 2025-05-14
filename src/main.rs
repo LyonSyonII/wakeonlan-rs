@@ -21,7 +21,7 @@ Environment variables:
     let packet = {
         let mut v = vec![0xffu8; 6];
         let mac = mac.split(':').fold(0, |mac, nums| {
-            (mac << 16) | u16::from_str_radix(nums, 16).unwrap() as u64
+            (mac << 8) | u8::from_str_radix(nums, 16).unwrap() as u64
         });
         if dbg!(mac.leading_zeros()) != 16 {
             println!("{mac:x}");
