@@ -1,5 +1,6 @@
 [package]
-name = "wake"
+name = "wakeonlan"
+description = "Very simple implementation of wakeonlan in Rust"
 version = "0.1.0"
 edition = "2024"
 
