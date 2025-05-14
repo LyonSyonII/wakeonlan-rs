@@ -1,12 +1,14 @@
 use std::io::{Read, Write};
 
 fn main() {
-    let usage = r#"Simple wake-on-lan magic packet sender
+    let usage = r#"Very simple wake-on-lan magic packet sender via a web API
+Send a GET request to WAKE_SERVER_ADDR:WAKE_SERVER_PORT/WAKE_CHAR
 
 Environment variables:
     <WAKE_MAC>          MAC of the device you want to wol.
     [WAKE_SERVER_ADDR]  Address where the server will be listening.  Default = OS provided
-    [WAKE_SERVER_PORT]  Port where the server will be listening.     Default = OS provided"#;
+    [WAKE_SERVER_PORT]  Port where the server will be listening.     Default = OS provided
+    [WAKE_CHAR]         Char that will activate the API.             Default = "w""#;
     if std::env::args().any(|a| a == "--help" || a == "-h") {
         println!("{usage}");
         std::process::exit(0);
@@ -15,6 +17,7 @@ Environment variables:
     let mac = std::env::var("WAKE_MAC").expect("WAKE_MAC");
     let port = std::env::var("WAKE_SERVER_PORT").unwrap_or("0".into());
     let addr = std::env::var("WAKE_SERVER_ADDR").unwrap_or("0.0.0.0".into()) + ":" + &port;
+    let wake_char = std::env::var("WAKE_PATH").map(|s| s.bytes().next().unwrap_or(b' ')).unwrap_or(b'w');
     let packet = {
         let mut v = vec![0xffu8; 6];
         let mac = mac.split(':').fold(0, |mac, nums| {
@@ -43,7 +46,7 @@ Environment variables:
     println!("Listening on http://{}", listener.local_addr().unwrap());
     for client in listener.incoming().flatten() {
         dbg!(&client);
-        if let Err(e) = handle_client(client, &mut udp, &packet) {
+        if let Err(e) = handle_client(client, wake_char, &mut udp, &packet) {
             eprintln!("{e}");
         }
     }
@@ -51,18 +54,21 @@ Environment variables:
 
 fn handle_client(
     mut client: std::net::TcpStream,
+    wake_char: u8,
     udp: &mut std::net::UdpSocket,
     packet: &[u8],
 ) -> std::io::Result<()> {
     client.read_exact(&mut [0, 0, 0, 0])?; // "GET "
 
     let mut route = [0, 0];
-    client.read_exact(&mut route)?; // "/[w]"
+    client.read_exact(&mut route)?; // "/[wake_char]"
 
-    match &route {
-        b"/w" => handle_wake(udp, packet)?,
-        _ => return Err(std::io::Error::last_os_error()),
+    if route[1] != wake_char {
+        // does not matter what is returned
+        return Err(std::io::Error::last_os_error());
     }
+
+    handle_wake(udp, packet)?;
 
     let response = "HTTP/1.1 200 OK\r\n\r\n";
     client.write_all(response.as_bytes())?;
