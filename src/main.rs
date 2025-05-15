@@ -2,22 +2,46 @@ use std::io::{Read, Write};
 
 fn main() {
     let usage = r#"Very simple wake-on-lan magic packet sender via a web API
-Send a GET request to WAKE_SERVER_ADDR:WAKE_SERVER_PORT/WAKE_CHAR
+Send a GET request to http://ADDR:PORT/CHAR
 
-Environment variables:
-    <WAKE_MAC>          MAC of the device you want to wol.
-    [WAKE_SERVER_ADDR]  Address where the server will be listening.  Default = OS provided
-    [WAKE_SERVER_PORT]  Port where the server will be listening.     Default = OS provided
-    [WAKE_CHAR]         Char that will activate the API.             Default = "w""#;
+Args & Environment variables:
+    --mac  | <WAKE_MAC>          MAC of the device you want to wol.
+    --addr | [WAKE_SERVER_ADDR]  Address where the server will be listening.  Default = OS provided
+    --port | [WAKE_SERVER_PORT]  Port where the server will be listening.     Default = OS provided
+    --char | [WAKE_CHAR]         Char that will activate the API.             Default = "w"
+    --help                       Print help."#;
     if std::env::args().any(|a| a == "--help" || a == "-h") {
         println!("{usage}");
         std::process::exit(0);
     }
 
-    let mac = std::env::var("WAKE_MAC").expect("WAKE_MAC");
-    let port = std::env::var("WAKE_SERVER_PORT").unwrap_or("0".into());
-    let addr = std::env::var("WAKE_SERVER_ADDR").unwrap_or("0.0.0.0".into()) + ":" + &port;
-    let wake_char = std::env::var("WAKE_PATH").map(|s| s.bytes().next().unwrap_or(b' ')).unwrap_or(b'w');
+    let mut cli = std::collections::HashMap::new();
+    let mut args = std::env::args().skip(1);
+    while let (Some(arg), Some(value)) = (args.next(), args.next()) {
+        cli.insert(arg, value);
+    }
+
+    let mac = std::env::var("WAKE_MAC")
+        .ok()
+        .or_else(|| cli.remove("--mac"))
+        .expect("WAKE_MAC");
+    let port = std::env::var("WAKE_SERVER_PORT")
+        .ok()
+        .or_else(|| cli.remove("--port"))
+        .unwrap_or("0".into());
+    let addr = std::env::var("WAKE_SERVER_ADDR")
+        .ok()
+        .or_else(|| cli.remove("--addr"))
+        .unwrap_or("0.0.0.0".into())
+        + ":"
+        + &port;
+    let wake_char = std::env::var("WAKE_PATH")
+        .ok()
+        .or_else(|| cli.remove("--char"))
+        .map(|s| s.bytes().next().unwrap_or(b' '))
+        .unwrap_or(b'w');
+    drop(cli);
+
     let packet = {
         let mut v = vec![0xffu8; 6];
         let mac = mac.split(':').fold(0, |mac, nums| {
